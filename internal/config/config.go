@@ -23,14 +23,14 @@ type Config struct {
 
 	Feedback string
 
-  BaseBranch string
+	BaseBranch string
 	MaxRetries int
 }
 
 func Load() *Config {
 	return &Config{
 		Provider:         getEnv("AGENT_PROVIDER", "gemini"),
-    APIKey:           getEnv("GEMINI_API_KEY", ""), // TODO: support multi agent
+		APIKey:           getEnv("GEMINI_API_KEY", ""), // TODO: support multi agent
 		Mode:             getEnv("MODE", "coder"),
 		TaskID:           getEnv("TASK_ID", "01"),
 		PRNumber:         getEnv("PR_NUMBER", ""),
@@ -39,7 +39,7 @@ func Load() *Config {
 		CommentStartLine: getEnv("COMMENT_START_LINE", ""),
 		CommentEndLine:   getEnv("COMMENT_END_LINE", ""),
 		Feedback:         getEnv("FEEDBACK", ""),
-    BaseBranch:       getEnv("BASE_BRANCH", ""),
+		BaseBranch:       getEnv("BASE_BRANCH", ""),
 		MaxRetries:       getEnvInt("MAX_RETRIES", 5),
 	}
 }

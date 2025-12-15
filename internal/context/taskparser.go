@@ -8,7 +8,7 @@ import (
 type TaskMetadata struct {
 	TargetFiles []string // Files to include with full content
 	Content     string   // Full task content
-  Language    string   // Language if specified
+	Language    string   // Language if specified
 }
 
 func ParseTaskMetadata(taskContent string) *TaskMetadata {
@@ -23,13 +23,13 @@ func ParseTaskMetadata(taskContent string) *TaskMetadata {
 		line := scanner.Text()
 		trimmed := strings.TrimSpace(line)
 
-    // Detect language
-    if strings.HasPrefix(strings.ToUpper(trimmed), "LANGUAGE:") {
-      meta.Language = strings.TrimSpace(trimmed[9:]) // len("LANGUAGE:") = 9
-      continue
-    }
+		// Detect language
+		if strings.HasPrefix(strings.ToUpper(trimmed), "LANGUAGE:") {
+			meta.Language = strings.TrimSpace(trimmed[9:]) // len("LANGUAGE:") = 9
+			continue
+		}
 
-    // Retrieve target files
+		// Retrieve target files
 		if strings.HasPrefix(strings.ToUpper(trimmed), "TARGET FILES:") {
 			inTargetFiles = true
 			continue

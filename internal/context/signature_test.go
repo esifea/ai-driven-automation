@@ -252,10 +252,10 @@ Handler* createHandler(Database* db);
 		t.Error("should contain logout declaration")
 	}
 
-  // Should not contain implementation
-  if strings.Contains(result, "return password == hash") {
-    t.Error("should not contain implementation details")
-  }
+	// Should not contain implementation
+	if strings.Contains(result, "return password == hash") {
+		t.Error("should not contain implementation details")
+	}
 
 	t.Logf("Extracted signatures:\n%s", result)
 }
