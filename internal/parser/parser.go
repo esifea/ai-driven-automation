@@ -18,7 +18,7 @@ func ParseFiles(response string) map[string]string {
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
 
-    // Format: ### File: path/to/file
+		// Format: ### File: path/to/file
 		if strings.HasPrefix(trimmed, "### File:") {
 			// Save previous file if exists
 			if currentFile != "" && len(codeLines) > 0 {
@@ -30,7 +30,7 @@ func ParseFiles(response string) map[string]string {
 			continue
 		}
 
-    // Code block
+		// Code block
 		if strings.HasPrefix(trimmed, "```") {
 			inBlock = !inBlock
 			continue

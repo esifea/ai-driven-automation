@@ -11,7 +11,7 @@ import (
 type DiffContext struct {
 	BaseBranch    string
 	CurrentBranch string
-	Diff          string            // Full diff
+	Diff          string // Full diff
 	ChangedFiles  []string
 	FilesBefore   map[string]string
 	FilesAfter    map[string]string
@@ -53,7 +53,7 @@ func GetDiffContext(baseBranch string) (*DiffContext, error) {
 		ctx.ChangedFiles = strings.Split(strings.TrimSpace(string(filesOut)), "\n")
 	}
 
-  // Get file contents
+	// Get file contents
 	for _, file := range ctx.ChangedFiles {
 		// Content from base branch
 		beforeOut, err := exec.Command("git", "show", baseBranch+":"+file).Output()
@@ -74,10 +74,10 @@ func GetDiffContext(baseBranch string) (*DiffContext, error) {
 func (d *DiffContext) GetContextForQA(targetFile string, targetLines string) string {
 	var b strings.Builder
 
-  b.WriteString(fmt.Sprintf("BRANCH: %s (base branch: %s)\n\n", d.CurrentBranch, d.BaseBranch))
+	b.WriteString(fmt.Sprintf("BRANCH: %s (base branch: %s)\n\n", d.CurrentBranch, d.BaseBranch))
 
 	if targetFile != "" {
-    // Asking about a specific file
+		// Asking about a specific file
 		b.WriteString(fmt.Sprintf("=== TARGET FILE: %s ===\n\n", targetFile))
 
 		if before, ok := d.FilesBefore[targetFile]; ok {
@@ -142,12 +142,12 @@ func (d *DiffContext) LoadAdditionalFiles(paths []string) map[string]string {
 func (d *DiffContext) GetContextForQAWithAdditional(targetFile, targetLines string, additionalFiles map[string]string, signatures string) string {
 	var b strings.Builder
 
-  b.WriteString(fmt.Sprintf("BRANCH: %s (base branch: %s)\n\n", d.CurrentBranch, d.BaseBranch))
+	b.WriteString(fmt.Sprintf("BRANCH: %s (base branch: %s)\n\n", d.CurrentBranch, d.BaseBranch))
 
 	b.WriteString("=== CHANGED FILES IN THIS PR ===\n\n")
 
 	if targetFile != "" {
-    // Asking about a specific file
+		// Asking about a specific file
 		b.WriteString(fmt.Sprintf("=== TARGET FILE: %s ===\n\n", targetFile))
 
 		if before, ok := d.FilesBefore[targetFile]; ok {
@@ -174,7 +174,7 @@ func (d *DiffContext) GetContextForQAWithAdditional(targetFile, targetLines stri
 			}
 			b.WriteString(fmt.Sprintf("=== Changed: %s ===\n", file))
 			if before, ok := d.FilesBefore[file]; ok {
-        b.WriteString("--- BEFORE (original) ---\n")
+				b.WriteString("--- BEFORE (original) ---\n")
 				b.WriteString(before)
 				b.WriteString("\n\n")
 			}
@@ -183,7 +183,7 @@ func (d *DiffContext) GetContextForQAWithAdditional(targetFile, targetLines stri
 			b.WriteString("\n\n")
 		}
 	} else {
-    b.WriteString("=== CHANGED FILES ===\n")
+		b.WriteString("=== CHANGED FILES ===\n")
 
 		// All changed files
 		for file, after := range d.FilesAfter {
