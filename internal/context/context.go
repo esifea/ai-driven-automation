@@ -41,10 +41,13 @@ type ContextType struct {
 	AdditionalFiles map[string]string // Full content
 }
 
+//--- Load contexts from docs ---//
+
+// docs/tasks/00_overview.md
 func GetOverviewDoc() string {
 	path := "docs/tasks/00_overview.md"
 
-	content, err := LoadFile(path)
+	content, err := loadFile(path)
 	if err != nil {
 		return ""
 	}
@@ -52,6 +55,7 @@ func GetOverviewDoc() string {
 	return content
 }
 
+// docs/tasks/{TASK_ID}_*.md (exclude *_completed.md)
 func GetInstructionDoc(taskID string) (string, error) {
 	pattern := fmt.Sprintf("docs/tasks/%s_*.md", taskID)
 
@@ -60,9 +64,57 @@ func GetInstructionDoc(taskID string) (string, error) {
 		return "", fmt.Errorf("no instruction file found for Task %s", taskID)
 	}
 
+	for _, f := range files {
+		if !strings.Contains(f, "_completed") {
+			return loadFile(f)
+		}
+	}
+
 	// XXX: Support multiple instruction files
-	return LoadFile(files[0])
+	return loadFile(files[0])
 }
+
+// docs/tasks/{TASK_ID}_*_completed.md
+func GetCompletedDoc(taskID string) (string, error) {
+	pattern := fmt.Sprintf("docs/tasks/%s_*_completed.md", taskID)
+
+	files, err := filepath.Glob(pattern)
+	if err != nil || len(files) == 0 {
+		return "", fmt.Errorf("no completed doc found for Task %s", taskID)
+	}
+
+	return loadFile(files[0])
+}
+
+func GetDependentContext(dependsOn []string) string {
+	if len(dependsOn) == 0 {
+		return ""
+	}
+
+	var b strings.Builder
+	b.WriteString("=== DEPENDENT TASKS CONTEXT ===\n\n")
+
+	for _, taskID := range dependsOn {
+		// Load completed summary
+		if completed, err := GetCompletedDoc(taskID); err == nil {
+			b.WriteString(fmt.Sprintf("--- Task %s (Completed) ---\n", taskID))
+			b.WriteString(completed)
+			b.WriteString("\n\n")
+			continue
+		}
+
+		// Fallback to original instructions
+		if instruction, err := GetInstructionDoc(taskID); err == nil {
+			b.WriteString(fmt.Sprintf("--- Task %s (Instructions Only) ---\n", taskID))
+			b.WriteString(instruction)
+			b.WriteString("\n\n")
+		}
+	}
+
+	return b.String()
+}
+
+//--- Load contexts from sources ---//
 
 func GetCodebaseContext(taskMetadata *TaskMetadata) *ContextType {
 	result := &ContextType{
@@ -98,7 +150,7 @@ func GetCodebaseContext(taskMetadata *TaskMetadata) *ContextType {
 			return nil
 		}
 
-		content, err := LoadFile(path)
+		content, err := loadFile(path)
 		if err != nil {
 			return nil
 		}
@@ -189,7 +241,7 @@ func (c *ContextType) ReloadFiles(paths []string) {
 			continue
 		}
 
-		content, err := LoadFile(path)
+		content, err := loadFile(path)
 		if err != nil {
 			continue
 		}
@@ -199,7 +251,7 @@ func (c *ContextType) ReloadFiles(paths []string) {
 	}
 }
 
-func LoadFile(path string) (string, error) {
+func loadFile(path string) (string, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return "", err

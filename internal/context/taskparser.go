@@ -8,7 +8,8 @@ import (
 type TaskMetadata struct {
 	TargetFiles []string // Files to include with full content
 	Content     string   // Full task content
-	Language    string   // Language if specified
+	DependsOn   []string
+	Language    string // Language if specified
 }
 
 func ParseTaskMetadata(taskContent string) *TaskMetadata {
@@ -26,6 +27,20 @@ func ParseTaskMetadata(taskContent string) *TaskMetadata {
 		// Detect language
 		if strings.HasPrefix(strings.ToUpper(trimmed), "LANGUAGE:") {
 			meta.Language = strings.TrimSpace(trimmed[9:]) // len("LANGUAGE:") = 9
+			continue
+		}
+
+		// Detect dependency files
+		if strings.HasPrefix(strings.ToUpper(trimmed), "DEPENDS_ON:") {
+			value := strings.TrimSpace(trimmed[11:]) // len("DEPENDS_ON:") = 11
+
+			targets := strings.Split(value, ",")
+			for _, file := range targets {
+				file = strings.TrimSpace(file)
+				if file != "" {
+					meta.DependsOn = append(meta.DependsOn, file)
+				}
+			}
 			continue
 		}
 
