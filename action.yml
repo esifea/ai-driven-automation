@@ -1,0 +1,93 @@
+name: 'AI Agent'
+description: 'AI-driven code automation with Coder/Reviewer agents using Google Gemini'
+author: 'esifea'
+
+branding:
+  icon: 'cpu'
+  color: 'blue'
+
+inputs:
+  mode:
+    description: 'Agent mode: coder, reviewer, or summary'
+    required: false
+    default: 'coder'
+  task_id:
+    description: 'Task ID to execute (e.g., 01, 02)'
+    required: false
+    default: '01'
+  gemini_api_key:
+    description: 'Google Gemini API key'
+    required: true
+  pr_number:
+    description: 'PR number (required for reviewer mode)'
+    required: false
+  pr_question:
+    description: 'Question for Q&A mode (triggered by /ask)'
+    required: false
+  base_branch:
+    description: 'Base branch for diff context'
+    required: false
+    default: 'main'
+  feedback:
+    description: 'Reviewer feedback for iteration'
+    required: false
+  comment_path:
+    description: 'File path for inline comment context'
+    required: false
+  comment_start_line:
+    description: 'Start line for multi-line comment'
+    required: false
+  comment_end_line:
+    description: 'End line for comment'
+    required: false
+  changed_files:
+    description: 'Comma-separated list of changed files (for summary mode)'
+    required: false
+  max_retries:
+    description: 'Maximum API retry attempts'
+    required: false
+    default: '5'
+
+outputs:
+  files_written:
+    description: 'Number of files written by the agent'
+  status:
+    description: 'Agent execution status (success/failure)'
+  review_result:
+    description: 'Review result (PASS/FAIL) for reviewer mode'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.25'
+
+    - name: Build Agent
+      shell: bash
+      run: |
+        cd ${{ github.action_path }}
+        go build -o agent ./cmd/agent
+
+    - name: Run Agent
+      id: run-agent
+      shell: bash
+      env:
+        GEMINI_API_KEY: ${{ inputs.gemini_api_key }}
+        MODE: ${{ inputs.mode }}
+        TASK_ID: ${{ inputs.task_id }}
+        PR_NUMBER: ${{ inputs.pr_number }}
+        PR_QUESTION: ${{ inputs.pr_question }}
+        BASE_BRANCH: ${{ inputs.base_branch }}
+        FEEDBACK: ${{ inputs.feedback }}
+        COMMENT_PATH: ${{ inputs.comment_path }}
+        COMMENT_START_LINE: ${{ inputs.comment_start_line }}
+        COMMENT_END_LINE: ${{ inputs.comment_end_line }}
+        CHANGED_FILES: ${{ inputs.changed_files }}
+        MAX_RETRIES: ${{ inputs.max_retries }}
+      run: |
+        ${{ github.action_path }}/agent \
+          --mode "$MODE" \
+          --task "$TASK_ID" \
+          --provider gemini
