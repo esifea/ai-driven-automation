@@ -300,7 +300,11 @@ func runReviewerMode(llm provider.Provider, cfg *config.Config) {
 	cmd.Stderr = os.Stderr
 
 	if err := cmd.Run(); err != nil {
-		log.Fatalf("Failed to submit review: %v", err)
+    // Check self-review error
+    log.Printf("Warning: Failed to submit review: %v", err)
+    log.Println("Reviewing your own PR not allowed by Github")
+
+    return
 	}
 	log.Printf("Submitted review: %s", eventType)
 }
