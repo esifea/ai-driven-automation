@@ -277,6 +277,11 @@ func runReviewerMode(llm provider.Provider, cfg *config.Config) {
 	if err != nil {
 		log.Fatalf("Review generation failed: %v", err)
 	}
+
+	fmt.Println("=== REVIEW CONTENT ===")
+	fmt.Println(review)
+	fmt.Println("=== END REVIEW ===")
+
 	log.Println("Review generated. Submitting to GitHub...")
 
 	// Determine status
