@@ -14,7 +14,6 @@ inputs:
   task_id:
     description: 'Task ID to execute (e.g., 01, 02)'
     required: false
-    default: '01'
   gemini_api_key:
     description: 'Google Gemini API key'
     required: true
@@ -60,9 +59,9 @@ runs:
   using: 'composite'
   steps:
     - name: Setup Go
-      uses: actions/setup-go@v5
+      uses: actions/setup-go@v6
       with:
-        go-version: '1.25'
+        go-version: '1.25.5'
 
     - name: Build Agent
       shell: bash

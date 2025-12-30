@@ -5,7 +5,6 @@ on:
     inputs:
       task_id:
         description: 'Task ID'
-        default: '01'
       mode:
         description: 'Agent Mode'
         default: 'coder'
@@ -71,7 +70,7 @@ jobs:
         with:
           gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
           mode: coder
-          task_id: ${{ inputs.task_id || '01' }}
+          task_id: ${{ inputs.task_id }}
           pr_question: >-
             ${{
               (contains(github.event.comment.body, '/ask') && github.event.comment.body) ||
@@ -107,13 +106,13 @@ jobs:
             echo "No code changes implemented."
           else
             git add .
-            git commit -m "refactor: AI implementation (Task ${{ inputs.task_id || '01' }})"
+            git commit -m "refactor: AI implementation (Task ${{ inputs.task_id }})"
             
             if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.mode }}" == "coder" ]]; then
-              BRANCH_NAME="refactor/task-${{ inputs.task_id || '01' }}-$(date +%s)"
+              BRANCH_NAME="refactor/task-${{ inputs.task_id }}-$(date +%s)"
               git checkout -b "$BRANCH_NAME"
               git push origin "$BRANCH_NAME"
-              gh pr create --title "Task ${{ inputs.task_id || '01' }}" --body "AI Implementation" --base main --head "$BRANCH_NAME"
+              gh pr create --title "Task ${{ inputs.task_id }}" --body "AI Implementation" --base main --head "$BRANCH_NAME"
             else
               TARGET_BRANCH=${{ steps.get-branch.outputs.branch || github.event.pull_request.head.ref }}
               git push origin HEAD:$TARGET_BRANCH
@@ -189,7 +188,7 @@ jobs:
         with:
           gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
           mode: reviewer
-          task_id: ${{ inputs.task_id || '01' }}
+          task_id: ${{ inputs.task_id }}
           pr_number: ${{ inputs.pr_number || github.event.pull_request.number }}
         env:
           GH_TOKEN: ${{ steps.app-reviewer-token.outputs.token }}
