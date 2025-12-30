@@ -177,18 +177,53 @@ jobs:
           app-id: ${{ secrets.APP_REVIEWER_ID }}
           private-key: ${{ secrets.APP_REVIEWER_SECRET }}
 
+      - name: Extract Task ID from Branch
+        id: extract-task
+        run: |
+          BRANCH="${{ github.event.pull_request.head.ref || github.ref_name }}"
+          echo "Branch: $BRANCH"
+
+          # Extract task ID from branch name patterns:
+          # - test/task-99-timestamp
+          # - refactor/task-99-timestamp
+          # - 99-feature-name
+          # - task-99
+          TASK_ID=""
+          if [[ "$BRANCH" =~ task-([0-9]+) ]]; then
+            TASK_ID="${BASH_REMATCH[1]}"
+          elif [[ "$BRANCH" =~ ^([0-9]+)[-_] ]]; then
+            TASK_ID="${BASH_REMATCH[1]}"
+          fi
+
+          if [[ -n "$TASK_ID" ]]; then
+            TASK_ID=$(printf "%02d" $((10#$TASK_ID)))
+          fi
+
+          echo "Extracted Task ID: $TASK_ID"
+          echo "task_id=$TASK_ID" >> $GITHUB_OUTPUT
+
+      - name: Check Task ID
+        if: steps.extract-task.outputs.task_id == ''
+        run: |
+          echo "::warning::Could not extract Task ID from branch name."
+          echo "Branch should match pattern: task-XX or XX-feature-name"
+          echo "Skipping reviewer."
+          exit 0
+
       - name: Checkout Repo
+        if: steps.extract-task.outputs.task_id != ''
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
           ref: ${{ inputs.mode == 'reviewer' && github.ref_name || github.event.pull_request.head.ref }}
 
       - name: Run AI Agent (Reviewer)
+        if: steps.extract-task.outputs.task_id != ''
         uses: ./
         with:
           gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
           mode: reviewer
-          task_id: ${{ inputs.task_id }}
+          task_id: ${{ steps.extract-task.outputs.task_id }}
           pr_number: ${{ inputs.pr_number || github.event.pull_request.number }}
         env:
           GH_TOKEN: ${{ steps.app-reviewer-token.outputs.token }}
