@@ -25,15 +25,31 @@ jobs:
   agent:
     runs-on: ubuntu-latest
     steps:
+      - name: Get PR Branch (for reviewer mode)
+        id: pr-branch
+        if: inputs.mode == 'reviewer' && inputs.pr_number != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_BRANCH=$(gh pr view ${{ inputs.pr_number }} --repo ${{ github.repository }} --json headRefName -q '.headRefName')
+          echo "branch=$PR_BRANCH" >> $GITHUB_OUTPUT
+          echo "PR Branch: $PR_BRANCH"
+
       - name: Checkout Repo
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          ref: ${{ steps.pr-branch.outputs.branch || github.ref }}
+
+      - name: Show Current Branch
+        run: |
+          echo "Current branch: $(git branch --show-current)"
+          echo "HEAD: $(git rev-parse HEAD)"
 
       - name: Setup Go
         uses: actions/setup-go@v6
         with:
-          go-version: '1.25.5'
+          go-version: '1.25'
 
       - name: Build Agent
         run: go build -o agent ./cmd/agent
@@ -49,7 +65,6 @@ jobs:
         run: |
           echo "=== Running Agent (Coder) ==="
           echo "Task ID: $TASK_ID"
-          echo ""
           ./agent --mode coder --task "$TASK_ID" --provider gemini
 
       - name: Run Agent (Reviewer)
@@ -64,21 +79,23 @@ jobs:
           echo "=== Running Agent (Reviewer) ==="
           echo "Task ID: $TASK_ID"
           echo "PR Number: $PR_NUMBER"
+          echo "=== Files in target directory ==="
+          ls -la internal/test/ 2>/dev/null || echo "internal/test/ does not exist"
           echo ""
-          
-          # Capture review output (agent may fail on self-PR review)
           ./agent --mode reviewer --task "$TASK_ID" --provider gemini 2>&1 | tee review_output.txt || true
-          
-          # Post as comment instead of formal review (works on own PRs)
-          if [[ -n "$PR_NUMBER" && -f review_output.txt ]]; then
-            echo ""
-            echo "=== Posting review as comment ==="
-            gh pr comment "$PR_NUMBER" --body "## 🤖 AI Review
 
-          \`\`\`
-          $(tail -50 review_output.txt)
-          \`\`\`"
-            echo "Review posted to PR #$PR_NUMBER"
+      - name: Post Review Comment
+        if: inputs.mode == 'reviewer' && inputs.pr_number != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+        run: |
+          REVIEW_CONTENT=$(sed -n '/=== REVIEW CONTENT ===/,/=== END REVIEW ===/p' review_output.txt | grep -v '=== REVIEW CONTENT ===' | grep -v '=== END REVIEW ===')
+          if [[ -n "$REVIEW_CONTENT" ]]; then
+            echo "Posting review to PR #$PR_NUMBER"
+            gh pr comment "$PR_NUMBER" --body "## AI Review"$'\n\n'"$REVIEW_CONTENT"
+          else
+            echo "No review content found"
           fi
 
       - name: Show Generated Files
@@ -86,48 +103,31 @@ jobs:
         run: |
           echo "=== Git Status ==="
           git status
-          
           echo ""
           echo "=== New & Modified Files Content ==="
-          {
-            git diff --name-only 2>/dev/null
-            git ls-files --others --exclude-standard 2>/dev/null
-          } | grep -v '^agent$' | head -20 | while read file; do
+          for file in $(git ls-files --others --exclude-standard | grep -v '^agent$' | head -20); do
             if [ -f "$file" ]; then
               echo ""
               echo "========== $file =========="
-              cat "$file" | head -100
-              echo ""
+              head -100 "$file"
             fi
           done
 
-      - name: Commit & Create PR
+      - name: Commit and Create PR
         if: inputs.mode == 'coder'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          
           rm -f agent
-          
           if [[ -z $(git status -s) ]]; then
             echo "No changes to commit"
             exit 0
           fi
-          
           BRANCH_NAME="test/task-${{ inputs.task_id }}-$(date +%s)"
           git checkout -b "$BRANCH_NAME"
           git add .
           git commit -m "test: AI generated code (Task ${{ inputs.task_id }})"
           git push origin "$BRANCH_NAME"
-          
-          gh pr create \
-            --title "Test: Task ${{ inputs.task_id }}" \
-            --body "AI-generated implementation for testing.
-
-          **Task ID:** ${{ inputs.task_id }}
-          **Mode:** ${{ inputs.mode }}
-          **Workflow Run:** ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
-            --base main \
-            --head "$BRANCH_NAME"
+          gh pr create --title "Test: Task ${{ inputs.task_id }}" --body "AI-generated implementation for testing." --base main --head "$BRANCH_NAME"
