@@ -1,11 +1,10 @@
-name: Task Complete
+name: Task Summary
 
 on:
-  pull_request:
-    types: [closed]
-    branches:
-      - main
-      - dev
+  pull_request_review:
+    types: [submitted]
+  issue_comment:
+    types: [created]
 
 permissions:
   contents: write
@@ -13,28 +12,38 @@ permissions:
 
 jobs:
   generate-summary:
-    name: Generate Completion Summary
-    if: github.event.pull_request.merged == true
+    if: >-
+      (github.event_name == 'pull_request_review' && github.event.review.state == 'approved') ||
+      (github.event_name == 'issue_comment' && github.event.issue.pull_request && contains(github.event.comment.body, '/summarize'))
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Get PR Info
+        id: pr-info
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "${{ github.event_name }}" == "issue_comment" ]; then
+            PR_NUMBER="${{ github.event.issue.number }}"
+          else
+            PR_NUMBER="${{ github.event.pull_request.number }}"
+          fi
+          
+          PR_BRANCH=$(gh pr view $PR_NUMBER --repo ${{ github.repository }} --json headRefName -q '.headRefName')
+          PR_TITLE=$(gh pr view $PR_NUMBER --repo ${{ github.repository }} --json title -q '.title')
+          
+          echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
+          echo "branch=$PR_BRANCH" >> $GITHUB_OUTPUT
+          echo "title=$PR_TITLE" >> $GITHUB_OUTPUT
 
       - name: Extract Task ID
         id: extract-task
         run: |
-          # Try to extract task ID from PR title or branch name
-          PR_TITLE="${{ github.event.pull_request.title }}"
-          BRANCH_NAME="${{ github.event.pull_request.head.ref }}"
+          PR_TITLE="${{ steps.pr-info.outputs.title }}"
+          BRANCH_NAME="${{ steps.pr-info.outputs.branch }}"
           
-          # Pattern: "Task 01" or "task-01" or "01_"
           TASK_ID=""
           
-          # Check PR title first
           if [[ "$PR_TITLE" =~ [Tt]ask[[:space:]]*([0-9]+) ]]; then
             TASK_ID="${BASH_REMATCH[1]}"
           elif [[ "$BRANCH_NAME" =~ task-?([0-9]+) ]]; then
@@ -43,7 +52,6 @@ jobs:
             TASK_ID="${BASH_REMATCH[1]}"
           fi
           
-          # Pad to 2 digits
           if [ -n "$TASK_ID" ]; then
             TASK_ID=$(printf "%02d" $((10#$TASK_ID)))
           fi
@@ -51,12 +59,26 @@ jobs:
           echo "task_id=$TASK_ID" >> $GITHUB_OUTPUT
           echo "Extracted Task ID: $TASK_ID"
 
+      - name: Skip if No Task ID
+        if: steps.extract-task.outputs.task_id == ''
+        run: |
+          echo "::warning::Could not extract Task ID from PR title or branch name."
+          exit 0
+
+      - name: Checkout PR Branch
+        if: steps.extract-task.outputs.task_id != ''
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ steps.pr-info.outputs.branch }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Check Task File Exists
         id: check-task
         if: steps.extract-task.outputs.task_id != ''
         run: |
           TASK_ID="${{ steps.extract-task.outputs.task_id }}"
-          TASK_FILE=$(find docs/tasks -name "${TASK_ID}_*.md" ! -name "*_completed.md" | head -1)
+          TASK_FILE=$(find docs/tasks -name "${TASK_ID}_*.md" ! -name "*_completed.md" 2>/dev/null | head -1)
           
           if [ -n "$TASK_FILE" ]; then
             echo "task_file=$TASK_FILE" >> $GITHUB_OUTPUT
@@ -68,108 +90,72 @@ jobs:
       - name: Get Changed Files
         id: changed-files
         if: steps.check-task.outputs.task_file != ''
-        run: |
-          # Get list of changed files in the PR
-          CHANGED=$(gh pr view ${{ github.event.pull_request.number }} --json files -q '.files[].path' | tr '\n' ',')
-          echo "changed_files=$CHANGED" >> $GITHUB_OUTPUT
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          CHANGED=$(gh pr view ${{ steps.pr-info.outputs.pr_number }} --json files -q '.files[].path' | tr '\n' ',')
+          echo "changed_files=$CHANGED" >> $GITHUB_OUTPUT
 
       - name: Setup Go
         if: steps.check-task.outputs.task_file != ''
         uses: actions/setup-go@v6
         with:
-          go-version: '1.25.5'
+          go-version: '1.25'
 
       - name: Build Agent
         if: steps.check-task.outputs.task_file != ''
         run: go build -o agent ./cmd/agent
 
       - name: Generate Summary
-        id: generate
         if: steps.check-task.outputs.task_file != ''
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           MODE: summary
           TASK_ID: ${{ steps.extract-task.outputs.task_id }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_NUMBER: ${{ steps.pr-info.outputs.pr_number }}
           CHANGED_FILES: ${{ steps.changed-files.outputs.changed_files }}
           MAX_RETRIES: 3
         run: |
-          ./agent --mode summary --task "$TASK_ID" --provider gemini > summary_output.md 2>&1 || true
-          
-          if [ -f summary_output.md ]; then
-            echo "Summary generated successfully"
-          fi
-
-      - name: Create Completed File
-        if: steps.check-task.outputs.task_file != ''
-        run: |
           TASK_ID="${{ steps.extract-task.outputs.task_id }}"
           TASK_FILE="${{ steps.check-task.outputs.task_file }}"
-          
-          # Derive completed filename
           BASENAME=$(basename "$TASK_FILE" .md)
           COMPLETED_FILE="docs/tasks/${BASENAME}_completed.md"
           
-          # Use generated summary if available, otherwise create basic one
-          if [ -f summary_output.md ] && [ -s summary_output.md ]; then
-            mv summary_output.md "$COMPLETED_FILE"
-          else
-            # Fallback: create basic completion file
-            cat > "$COMPLETED_FILE" << EOF
-          # Task ${TASK_ID} - Completed
-
-          MERGED: $(date -u '+%Y-%m-%d')
-          PR: #${{ github.event.pull_request.number }}
-
-          ## Summary
-          This task was completed and merged.
-
-          ## Changed Files
-          $(gh pr view ${{ github.event.pull_request.number }} --json files -q '.files[].path' | sed 's/^/- /')
-
-          ## PR Description
-          ${{ github.event.pull_request.body }}
-          EOF
+          ./agent --mode summary --task "$TASK_ID" --provider gemini > "$COMPLETED_FILE" 2>&1 || true
+          
+          # Fallback if agent fails
+          if [ ! -s "$COMPLETED_FILE" ]; then
+            echo "# Task ${TASK_ID} - Completed" > "$COMPLETED_FILE"
+            echo "" >> "$COMPLETED_FILE"
+            echo "PR: #${{ steps.pr-info.outputs.pr_number }}" >> "$COMPLETED_FILE"
+            echo "" >> "$COMPLETED_FILE"
+            echo "## Summary" >> "$COMPLETED_FILE"
+            echo "Implementation completed." >> "$COMPLETED_FILE"
+            echo "" >> "$COMPLETED_FILE"
+            echo "## Changed Files" >> "$COMPLETED_FILE"
+            gh pr view ${{ steps.pr-info.outputs.pr_number }} --json files -q '.files[].path' | sed 's/^/- /' >> "$COMPLETED_FILE"
           fi
           
           echo "Created: $COMPLETED_FILE"
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Commit and Push
+      - name: Commit Summary
         if: steps.check-task.outputs.task_file != ''
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           
           TASK_ID="${{ steps.extract-task.outputs.task_id }}"
-          COMPLETED_FILE=$(find docs/tasks -name "${TASK_ID}_*_completed.md" | head -1)
+          COMPLETED_FILE=$(find docs/tasks -name "${TASK_ID}_*_completed.md" 2>/dev/null | head -1)
           
           if [ -n "$COMPLETED_FILE" ]; then
             git add "$COMPLETED_FILE"
             
             if ! git diff --cached --quiet; then
-              git commit -m "docs: add completion summary for Task ${TASK_ID}"
+              git commit -m "docs: generate completion summary for Task ${TASK_ID}"
               git push
               echo "Pushed completion summary"
             else
               echo "No changes to commit"
             fi
           fi
-
-      - name: Post Comment
-        if: steps.check-task.outputs.task_file != ''
-        uses: actions/github-script@v8
-        with:
-          script: |
-            const taskId = '${{ steps.extract-task.outputs.task_id }}';
-            const prNumber = context.payload.pull_request.number;
-            
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: prNumber,
-              body: `## ✅ Task ${taskId} Completed\n\nA completion summary has been generated and committed to \`docs/tasks/${taskId}_*_completed.md\`.\n\nThis summary will be available as context for dependent tasks.`
-            });
