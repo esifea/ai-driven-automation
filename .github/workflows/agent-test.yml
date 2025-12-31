@@ -25,10 +25,26 @@ jobs:
   agent:
     runs-on: ubuntu-latest
     steps:
+      - name: Get PR Branch (for reviewer mode)
+        id: pr-branch
+        if: inputs.mode == 'reviewer' && inputs.pr_number != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_BRANCH=$(gh pr view ${{ inputs.pr_number }} --repo ${{ github.repository }} --json headRefName -q '.headRefName')
+          echo "branch=$PR_BRANCH" >> $GITHUB_OUTPUT
+          echo "PR Branch: $PR_BRANCH"
+
       - name: Checkout Repo
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          ref: ${{ steps.pr-branch.outputs.branch || github.ref }}
+
+      - name: Show Current Branch
+        run: |
+          echo "Current branch: $(git branch --show-current)"
+          echo "HEAD: $(git rev-parse HEAD)"
 
       - name: Setup Go
         uses: actions/setup-go@v6
@@ -73,12 +89,18 @@ jobs:
           if [[ -n "$PR_NUMBER" && -f review_output.txt ]]; then
             echo ""
             echo "=== Posting review as comment ==="
-            gh pr comment "$PR_NUMBER" --body "## 🤖 AI Review
 
-          \`\`\`
-          $(tail -50 review_output.txt)
-          \`\`\`"
-            echo "Review posted to PR #$PR_NUMBER"
+            # Extract review
+            REVIEW_CONTENT=$(sed -n '/=== REVIEW CONTENT ===/,/=== END REVIEW ===/p' review_output.txt | grep -v '=== REVIEW CONTENT ===' | grep -v '=== END REVIEW ===')
+
+            if [[ -n "$REVIEW_CONTENT" ]]; then
+              gh pr comment "$PR_NUMBER" --body "
+
+$REVIEW_CONTENT"
+              echo "Review posted to PR #$PR_NUMBER"
+            else
+              echo "No review content found"
+            fi
           fi
 
       - name: Show Generated Files
