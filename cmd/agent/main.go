@@ -23,6 +23,8 @@ func main() {
 	providerName := flag.String("provider", "", "LLM provider: claude, gemini")
 	flag.Parse()
 
+  fmt.Fprintf(os.Stderr, "DEBUG: flag mode=%q, flag task=%q\n", *mode, *taskID)
+
 	// Init config
 	cfg := config.Load()
 
@@ -52,6 +54,8 @@ func main() {
 	switch cfg.Mode {
 	case "reviewer":
 		runReviewerMode(llm, cfg)
+	case "summary":
+		runSummaryMode(llm, cfg)
 	default:
 		runCoderMode(llm, cfg)
 	}
@@ -300,11 +304,53 @@ func runReviewerMode(llm provider.Provider, cfg *config.Config) {
 	cmd.Stderr = os.Stderr
 
 	if err := cmd.Run(); err != nil {
-    // Check self-review error
-    log.Printf("Warning: Failed to submit review: %v", err)
-    log.Println("Reviewing your own PR not allowed by Github")
+		// Check self-review error
+		log.Printf("Warning: Failed to submit review: %v", err)
+		log.Println("Reviewing your own PR not allowed by Github")
 
-    return
+		return
 	}
 	log.Printf("Submitted review: %s", eventType)
+}
+
+func runSummaryMode(llm provider.Provider, cfg *config.Config) {
+	log.Printf("--- SUMMARY AGENT STARTED (Task: %s) ---", cfg.TaskID)
+
+	instruction, err := ctx.GetInstructionDoc(cfg.TaskID)
+	if err != nil {
+		log.Fatalf("Failed to load task instructions: %v", err)
+	}
+
+	// Get changed files from environment
+	changedFiles := make(map[string]string)
+	if cfg.ChangedFiles != "" {
+		paths := strings.Split(cfg.ChangedFiles, ",")
+		for _, path := range paths {
+			path = strings.TrimSpace(path)
+			if path == "" {
+				continue
+			}
+			content, err := os.ReadFile(path)
+			if err != nil {
+				log.Printf("Warning: could not read %s: %v", path, err)
+				continue
+			}
+			changedFiles[path] = string(content)
+		}
+	}
+
+	summary, err := role.GenerateCompletionSummary(
+		context.Background(), llm,
+		&role.SummaryRequest{
+			TaskID:       cfg.TaskID,
+			Instruction:  instruction,
+			FilesChanged: changedFiles,
+			PRNumber:     cfg.PRNumber,
+		},
+	)
+	if err != nil {
+		log.Fatalf("Summary generation failed: %v", err)
+	}
+
+	fmt.Print(summary)
 }

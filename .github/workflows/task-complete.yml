@@ -122,7 +122,7 @@ jobs:
           BASENAME=$(basename "$TASK_FILE" .md)
           COMPLETED_FILE="docs/tasks/${BASENAME}_completed.md"
           
-          ./agent --mode summary --task "$TASK_ID" --provider gemini > "$COMPLETED_FILE" 2>&1 || true
+          ./agent --mode summary --task "$TASK_ID" --provider gemini > "$COMPLETED_FILE" || true
           
           # Fallback if agent fails
           if [ ! -s "$COMPLETED_FILE" ]; then
