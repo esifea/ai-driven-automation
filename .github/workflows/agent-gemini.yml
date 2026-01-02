@@ -15,6 +15,9 @@ on:
       pr_number:
         description: 'PR Number (for reviewer mode)'
         required: false
+      base_branch:
+        description: 'Base branch for PR'
+        default: 'main'
   issue_comment:
     types: [created, edited]
   pull_request:
@@ -112,7 +115,7 @@ jobs:
               BRANCH_NAME="refactor/task-${{ inputs.task_id }}-$(date +%s)"
               git checkout -b "$BRANCH_NAME"
               git push origin "$BRANCH_NAME"
-              gh pr create --title "Task ${{ inputs.task_id }}" --body "AI Implementation" --base main --head "$BRANCH_NAME"
+              gh pr create --title "Task ${{ inputs.task_id }}" --body "AI Implementation" --base "${{ inputs.base_branch || 'main' }}" --head "$BRANCH_NAME"
             else
               TARGET_BRANCH=${{ steps.get-branch.outputs.branch || github.event.pull_request.head.ref }}
               git push origin HEAD:$TARGET_BRANCH

@@ -16,6 +16,9 @@ on:
       pr_number:
         description: 'PR Number (for reviewer mode)'
         required: false
+      base_branch:
+        description: 'Base branch for PR'
+        default: 'dev'
 
 permissions:
   contents: write
@@ -130,4 +133,4 @@ jobs:
           git add .
           git commit -m "test: AI generated code (Task ${{ inputs.task_id }})"
           git push origin "$BRANCH_NAME"
-          gh pr create --title "Test: Task ${{ inputs.task_id }}" --body "AI-generated implementation for testing." --base main --head "$BRANCH_NAME"
+          gh pr create --title "Test: Task ${{ inputs.task_id }}" --body "AI-generated implementation for testing." --base "${{ inputs.base_branch }}" --head "$BRANCH_NAME"
