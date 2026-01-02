@@ -23,8 +23,9 @@ type Config struct {
 
 	Feedback string
 
-	BaseBranch string
-	MaxRetries int
+	BaseBranch   string
+	ChangedFiles string
+	MaxRetries   int
 }
 
 func Load() *Config {
@@ -40,6 +41,7 @@ func Load() *Config {
 		CommentEndLine:   getEnv("COMMENT_END_LINE", ""),
 		Feedback:         getEnv("FEEDBACK", ""),
 		BaseBranch:       getEnv("BASE_BRANCH", ""),
+		ChangedFiles:     getEnv("CHANGED_FILES", ""),
 		MaxRetries:       getEnvInt("MAX_RETRIES", 5),
 	}
 }
